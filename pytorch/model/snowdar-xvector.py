@@ -24,7 +24,7 @@ class Xvector(TopVirtualNnet):
              margin_loss=False, margin_loss_params={},
              use_step=False, step_params={},
              transfer_from="softmax_loss",
-             training=True, extracted_embedding="far"):
+             training=True, extracted_embedding="far", orth_lambda = 0.1):
 
         ## Params.
         default_dropout_params = {
@@ -69,7 +69,8 @@ class Xvector(TopVirtualNnet):
             "m":False, "lambda_0":0, "lambda_b":1000, "alpha":5, "gamma":1e-4,
             "s":False, "s_tuple":(30, 12), "s_list":None,
             "t":False, "t_tuple":(0.5, 1.2), 
-            "p":False, "p_tuple":(0.5, 0.1)
+            "p":False, "p_tuple":(0.5, 0.1),
+            "orth":False
         }
 
         dropout_params = utils.assign_params_dict(default_dropout_params, dropout_params)
@@ -87,6 +88,8 @@ class Xvector(TopVirtualNnet):
 
         self.extracted_embedding = extracted_embedding # For extract.
         
+        self.orth_lambda = orth_lambda # For orth training
+
         ## Nnet.
         # Head
         self.mixup = Mixup(alpha=mixup_alpha) if mixup else None
@@ -148,6 +151,7 @@ class Xvector(TopVirtualNnet):
         # Do not need when extracting embedding.
         if training :
             if margin_loss:
+                margin_loss_params["orth_lambda"] = self.orth_lambda
                 self.loss = MarginSoftmaxLoss(512, num_targets, **margin_loss_params)
             else:
                 self.loss = SoftmaxLoss(512, num_targets)
@@ -216,6 +220,11 @@ class Xvector(TopVirtualNnet):
             return self.wrapper_loss(inputs, targets)
         else:
             return self.loss(inputs, targets)
+
+    @utils.for_device_free
+    def get_orth_loss(self, inputs, targets):
+        normalized_weight = F.normalize(self.loss.weight.squeeze(dim=2), dim=1)
+        return torch.svd(torch.mm(normalized_weight.T, normalized_weight) - torch.eye(normalized_weight.shape[1]).to(normalized_weight.device))[1][0]
 
     @utils.for_device_free
     def get_accuracy(self, targets):
@@ -301,6 +310,9 @@ class Xvector(TopVirtualNnet):
 
             if self.step_params["s"]:
                 self.loss.s = self.step_params["s_tuple"][self.step_params["s_list"][epoch]]
+
+            if self.step_params["orth"]:
+                self.orth_lambda = self.orth_lambda * 1.5
 
 
 
