@@ -180,7 +180,7 @@ class MarginSoftmaxLoss(TopVirtualLoss):
              inter_loss=0.,
              ring_loss=0.,
              curricular=False,
-             reduction='mean', eps=1.0e-10, init=True):
+             reduction='mean', eps=1.0e-10, init=True, orth_type = '', orth_lambda = 0.1):
 
         self.input_dim = input_dim
         self.num_targets = num_targets
@@ -205,6 +205,9 @@ class MarginSoftmaxLoss(TopVirtualLoss):
             self.feature_normalize = False
 
         self.eps = eps
+        
+        self.orth_type = orth_type
+        self.otrh_lambda = orth_lambda
 
         if feature_normalize :
             p_target = [0.9, 0.95, 0.99]
@@ -245,6 +248,14 @@ class MarginSoftmaxLoss(TopVirtualLoss):
             # For valid set.
             outputs = self.s * cosine_theta
             return self.loss_function(outputs, targets)
+
+        # # check orth
+        # if np.random.rand() < 0.1:    
+        #     orth = []
+        #     for i in range(normalized_weight.shape[0]):
+        #         for j in range(i+1, normalized_weight.shape[0]):
+        #             orth.append(torch.dot(normalized_weight[i], normalized_weight[j]).item())
+        #     print(orth)
 
         ## Margin Penalty
         # cosine_theta [batch_size, num_class]
@@ -298,6 +309,10 @@ class MarginSoftmaxLoss(TopVirtualLoss):
         else:
             ring_loss = 0.
 
+        if self.orth_type == 'weight_replace':
+            U, S, V = torch.svd(normalized_weight.T)
+            self.weight = torch.mm(U, torch.diag(S)).T
+
         if self.mhe_loss:
             sub_weight = normalized_weight - torch.index_select(normalized_weight, 0, targets).unsqueeze(dim=1)
             # [N, C]
@@ -311,6 +326,8 @@ class MarginSoftmaxLoss(TopVirtualLoss):
             return self.loss_function(outputs/self.t, targets) + the_mhe_loss + self.ring_loss * ring_loss
         elif self.inter_loss > 0:
             return self.loss_function(outputs/self.t, targets) + self.inter_loss * inter_loss + self.ring_loss * ring_loss
+        elif self.orth_type == 'spec_norm':
+            return self.loss_function(outputs/self.t, targets) + self.ring_loss * ring_loss + self.orth_lambda * torch.svd(torch.mm(normalized_weight.T, normalized_weight) - torch.eye(normalized_weight.shape[1]).to(normalized_weight.device))[1][0]
         else:
             return self.loss_function(outputs/self.t, targets) + self.ring_loss * ring_loss
     
@@ -415,4 +432,187 @@ class MixupLoss(TopVirtualLoss):
         else:
             return self.compute_accuracy(self.base_loss.get_posterior(), targets)
 
+class SoftmaxLossWithFR(TopVirtualLoss):
+    """ An usual log-softmax loss with affine component.
+    """
+    def init(self, input_dim, num_targets, t=1, reduction='mean', special_init=False):
+        self.affine = TdnnAffine(input_dim, num_targets)
+        self.t = t # temperature
+        # CrossEntropyLoss() has included the LogSoftmax, so do not add this function extra.
+        self.loss_function = torch.nn.CrossEntropyLoss(reduction=reduction)
+
+        # The special_init is not recommended in this loss component
+        if special_init :
+            torch.nn.init.xavier_uniform_(self.affine.weight, gain=torch.nn.init.calculate_gain('sigmoid'))
+
+    def forward(self, inputs, targets):
+        """Final outputs should be a (N, C) matrix and targets is a (1,N) matrix where there are 
+        N targets-indexes (index value belongs to 0~9 when target-class C = 10) for N examples rather than 
+        using one-hot format directly.
+        One example, one target.
+        @inputs: a 3-dimensional tensor (a batch), including [samples-index, frames-dim-index, frames-index]
+        """
+        assert len(inputs.shape) == 3
+        assert inputs.shape[2] == 1
+
+        posterior = self.affine(inputs)
+        self.posterior = posterior.detach()
+
+        # The frames-index is 1 now.
+        outputs = torch.squeeze(posterior, dim=2)
+
+        inp = inputs.squeeze(2) # (samples-index, frames-dim-index) (batch, 512)
+        FR = 0
+        for i in range(inp.shape[0]):
+            for j in range(i+1, inp.shape[0]):
+                FR += torch.sum(2*(inp[i]*inp[i] + inp[j]*inp[j]) - (inp[i]+inp[j])*(inp[i]+inp[j]) - (inp[i]-inp[j])*(inp[i]-inp[j]))
+        return self.loss_function(outputs/self.t, targets) + FR
+
+class SoftmaxLossWithFRR(TopVirtualLoss):
+    """ An usual log-softmax loss with affine component.
+    """
+    def init(self, input_dim, num_targets, t=1, reduction='mean', special_init=False):
+        self.affine = TdnnAffine(input_dim, num_targets)
+        self.t = t # temperature
+        # CrossEntropyLoss() has included the LogSoftmax, so do not add this function extra.
+        self.loss_function = torch.nn.CrossEntropyLoss(reduction=reduction)
+
+        # The special_init is not recommended in this loss component
+        if special_init :
+            torch.nn.init.xavier_uniform_(self.affine.weight, gain=torch.nn.init.calculate_gain('sigmoid'))
+
+    def forward(self, inputs, targets):
+        """Final outputs should be a (N, C) matrix and targets is a (1,N) matrix where there are 
+        N targets-indexes (index value belongs to 0~9 when target-class C = 10) for N examples rather than 
+        using one-hot format directly.
+        One example, one target.
+        @inputs: a 3-dimensional tensor (a batch), including [samples-index, frames-dim-index, frames-index]
+        """
+        assert len(inputs.shape) == 3
+        assert inputs.shape[2] == 1
+
+        posterior = self.affine(inputs)
+        self.posterior = posterior.detach()
+
+        # The frames-index is 1 now.
+        outputs = torch.squeeze(posterior, dim=2)
+
+        inp = inputs.squeeze(2) # (samples-index, frames-dim-index) (batch, 512)
+
+        return self.loss_function(outputs/self.t, targets) + torch.sum(2*(inp[0]*inp[0] + inp[1]*inp[1]) - (inp[0]+inp[1])*(inp[0]+inp[1]) - (inp[0]-inp[1])*(inp[0]-inp[1]))
+
+
+class BiAamSoftmaxLoss(TopVirtualLoss):
+    """
+    Aam-softmax with two banches  
+                -----input*w1-----
+    input ----> |                |--------> softmax ---> predict
+                -----input*w2-----
+    """
+    def init(self, input_dim, num_targets,
+             m=0.2, s=30., t=1.,
+             feature_normalize=True,
+             method="am",
+             double=False,
+             mhe_loss=False, mhe_w=0.01,
+             inter_loss=0.,
+             ring_loss=0.,
+             curricular=False,
+             reduction='mean', eps=1.0e-10, init=True, orth_type = '', orth_lambda = 0.1):
+
+        self.input_dim = input_dim
+        self.num_targets = num_targets
+        self.weight = torch.nn.Parameter(torch.randn(num_targets, input_dim, 1))
+        self.s = s # scale factor with feature normalization
+        self.m = m # margin
+        self.t = t # temperature
+        self.feature_normalize = feature_normalize
+        self.double = double
+        self.feature_normalize = feature_normalize
+        self.lambda_factor = 0
+
+        self.eps = eps
+        
+        self.orth_type = orth_type
+        self.otrh_lambda = orth_lambda
+
+        if feature_normalize :
+            p_target = [0.9, 0.95, 0.99]
+            suggested_s = [ (num_targets-1)/num_targets*np.log((num_targets-1)*x/(1-x)) for x in p_target ]
+
+            if self.s < suggested_s[0]:
+                print("Warning : using feature noamlization with small scalar s={s} could result in bad convergence. \
+                There are some suggested s : {suggested_s} w.r.t p_target {p_target}.".format(
+                s=self.s, suggested_s=suggested_s, p_target=p_target))
+
+        self.loss_function = torch.nn.CrossEntropyLoss(reduction=reduction)
+
+        # Init weight.
+        if init:
+             # torch.nn.init.xavier_normal_(self.weight, gain=1.0)
+            torch.nn.init.normal_(self.weight, 0., 0.01) # It seems better.
+
+    def forward(self, inputs, targets):
+        """
+        @inputs: a 3-dimensional tensor (a batch), including [samples-index, frames-dim-index, frames-index]
+        """
+        assert len(inputs.shape) == 3
+        assert inputs.shape[2] == 1
+
+        inputs_1, inputs_2 = torch.split(inputs, 512, 1)
+
+        ## Normalize
+        normalized_x_1 = F.normalize(inputs_1.squeeze(dim=2), dim=1)
+        normalized_x_2 = F.normalize(inputs_2.squeeze(dim=2), dim=1)
+        normalized_weight = F.normalize(self.weight.squeeze(dim=2), dim=1)
+
+        cosine_theta_1 = F.linear(normalized_x_1, normalized_weight[:2]) # shape = (B, 2)
+        cosine_theta_2 = F.linear(normalized_x_2, normalized_weight[2:]) # shape = (B, 8)
+
+        # proceece to expected order (Kazak, Tibet, Uyghu, ...)
+        cosine_theta = torch.cat((cosine_theta_1, cosine_theta_2), dim=1)
+        colomn = cosine_theta[:, 1].clone().detach()
+        cosine_theta[:, 1] = cosine_theta[:, 2]
+        cosine_theta[:, 2] = colomn
+        self.posterior = (self.s * cosine_theta.detach()).unsqueeze(2)
+
+        if not self.training:
+            # For valid set.
+            outputs = self.s * cosine_theta
+            return self.loss_function(outputs, targets)
+
+        # # check orth
+        # if np.random.rand() < 0.1:    
+        #     orth = []
+        #     for i in range(normalized_weight.shape[0]):
+        #         for j in range(i+1, normalized_weight.shape[0]):
+        #             orth.append(torch.dot(normalized_weight[i], normalized_weight[j]).item())
+        #     print(orth)
+
+        ## Margin Penalty
+        # cosine_theta [batch_size, num_class]
+        # targets.unsqueeze(1) [batch_size, 1]
+        
+        
+        cosine_theta_target = cosine_theta.gather(1, targets.unsqueeze(1))
+        penalty_cosine_theta = torch.cos(torch.acos(cosine_theta_target) + self.m)
+        if self.double:
+            double_cosine_theta = torch.cos(torch.acos(cosine_theta).add(-self.m))
+       
+        penalty_cosine_theta = 1 / (1 + self.lambda_factor) * penalty_cosine_theta + \
+                               self.lambda_factor / (1 + self.lambda_factor) * cosine_theta_target
+
+        if self.double:
+            cosine_theta = 1/(1+self.lambda_factor) * double_cosine_theta + self.lambda_factor/(1+self.lambda_factor) * cosine_theta
+        
+        outputs = self.s * cosine_theta.scatter(1, targets.unsqueeze(1), penalty_cosine_theta)
+
+        return self.loss_function(outputs/self.t, targets)
+    
+    def step(self, lambda_factor):
+        self.lambda_factor = lambda_factor
+
+    def extra_repr(self):
+        return '(~affine): (input_dim={input_dim}, num_targets={num_targets}, double={double}, ' \
+               'margin={m}, s={s}, t={t}, feature_normalize={feature_normalize}, eps={eps})'.format(**self.__dict__)
 

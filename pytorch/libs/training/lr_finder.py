@@ -81,14 +81,14 @@ def for_lr_finder(function):
                 snapshot = {"lr":lr}
                 for i in range(len(keys)):
                     snapshot[keys[i]] = smoothed_values[i]
-
+    
                 reporter.update(num_batch, snapshot)
 
-                # Stop if the main value is exploding.
-                if num_batch > 1 and smoothed_values[0] > 4 * best_value:
-                    reporter.finish()
-                    logger.info("Stop lr finder early by default rule.")
-                    return log_lrs[split[0]:split[1]], value_matrix.T[:,split[0]:split[1]]
+                # # Stop if the main value is exploding.
+                # if num_batch > 1 and smoothed_values[0] > 4 * best_value:
+                #     reporter.finish()
+                #     logger.info("Stop lr finder early by default rule.")
+                #     return log_lrs[split[0]:split[1]], value_matrix.T[:,split[0]:split[1]]
 
                 # Record the best main value. The main value which has the index-0 is usually the training loss.
                 if num_batch == 1 or smoothed_values[0] < best_value:

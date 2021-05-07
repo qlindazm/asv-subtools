@@ -5,8 +5,8 @@
 nj=30
 
 stage=0
-endstage=2
-volume=false
+endstage=1
+volume=true
 basefeat=false
 vad=true
 
@@ -19,11 +19,12 @@ feat_conf=conf/sre-mfcc-20.conf
 vad_conf=conf/vad-5.0.conf
 
 pitch=true
+suffix=sp
 
 . subtools/parse_options.sh
 . subtools/path.sh
 
-suffix=sp
+#suffix=sp
 [ $volume == "true" ] && suffix=volume_$suffix
 
 for data in $datasets ;do
@@ -44,43 +45,5 @@ subtools/makeFeatures.sh --nj $nj --pitch $pitch ${srcdir}_$suffix $feat_type $f
 [ $vad == "true" ] && subtools/computeVad.sh --nj $nj ${srcdir}_$suffix $vad_conf
 fi
 
-if [[ $stage -le 2 && 2 -le $endstage ]];then
-echo "[stage 2] Concatenate features"
-
-rm -rf ${srcdir}_concat_$suffix
-mkdir -p ${srcdir}_concat_$suffix
-cp ${srcdir}/{wav.scp,utt2spk,spk2utt} ${srcdir}_concat_$suffix
-
-name=`basename $srcdir`
-featsname=`echo "${srcdir}_concat_$suffix" | sed 's/\// /g' | awk '{for(i=1;i<=NF-1;i++){printf $i"_";}printf $NF}'`
-featsdir=exp/features/$feat_type/$featsname
-mkdir -p $featsdir/log
-
-scp=$srcdir/wav.scp
-spfeats=${srcdir}_$suffix/feats.scp
-
-compress=true
-
-split_scps=""
-for n in $(seq $nj); do
-    split_scps="$split_scps $featsdir/log/wav_${name}.$n.scp"
-done
-
-subtools/kaldi/utils/split_scp.pl $scp $split_scps || exit 1;
-
-run.pl JOB=1:$nj $featsdir/log/concat_${feat_type}_$name.JOB.log \
-    awk 'NR==FNR{a[$1]=$2}NR>FNR{
-    printf $1" ";system("concat-feats --binary=false "a[$1"-sp0.9"]" "a[$1]" "a[$1"-sp1.1"]" - 2>/dev/null");
-    }' $spfeats $featsdir/log/wav_${name}.JOB.scp \| \
-    copy-feats --compress=$compress ark:- \
-      ark,scp:$featsdir/concat_${feat_type}_$name.JOB.ark,$featsdir/concat_${feat_type}_$name.JOB.scp \
-     || exit 1
-
-for n in $(seq $nj); do
-  cat $featsdir/concat_${feat_type}_$name.$n.scp || exit 1;
-done > ${srcdir}_concat_$suffix/feats.scp || exit 1
-[ $vad == "true" ] && subtools/computeVad.sh --nj $nj ${srcdir}_concat_$suffix $vad_conf
-echo "Succeeded concatenating speed-perturb-features from ${name}"
-fi
 
 done

@@ -3,7 +3,7 @@
 # Copyright xmuspeech (Author:Snowdar 2018-11-07)
 
 set -e
-
+# echo "$0 $@" 
 #####################
 # All processes are tuning and you could use bool varibles conveniently to ignore what process you don't need.
 #
@@ -18,7 +18,7 @@ set -e
 
 eval=false # if true, will just generate the score rather than compute metric
 
-prefix=plp_20_5.0 # if NULL, datadir will be data/$someset rather than data/$prefix/$someset.
+prefix=mfcc_20_5.0 #plp_20_5.0 # if NULL, datadir will be data/$someset rather than data/$prefix/$someset.
 
 extra_name= # it could be used to mark a trainset in score name
 
@@ -55,14 +55,14 @@ test_process="lda-submean-whiten-norm" # this process should not contain "mean" 
 #####################
 default_config=false # if true, all of the data config of lda, submean and whiten are ""$trainset[$trainset $enrollset $testset]""
 
-lda=false # if false, forcely ignore lda process
+lda=true # if false, forcely ignore lda process
 clda=10
 lda_process="norm-trainlda"
-lda_data_config="train[train dev]"  # if NULL, will be set "$enrollset[$enrollset $testset]"
+lda_data_config= #"train[train dev]"  # if NULL, will be set "$enrollset[$enrollset $testset]"
 
 submean=false
 submean_process="lda-getmean" # getmean means computing the global mean vector from a dataset
-submean_data_config="train[train dev]" # if NULL, will be set "$enrollset[$enrollset $testset]"
+submean_data_config= #train[train dev]" # if NULL, will be set "$enrollset[$enrollset $testset]"
 
 whiten=false # if false, forcely ignore whiten process
 whiten_process="lda-submean-trainwhiten" # trainwhiten means train a ZCA whitening mat and trainpcawhiten means PCA
@@ -70,8 +70,8 @@ whiten_data_config="train[train dev]" # if NULL, will be set "$enrollset[$enroll
 
 #####################
 
-score="cosine"  # cosine | plda | aplda | svm | gmm | lr #
-metric="eer" # eer | Cavg #
+score="plda"  # cosine | plda | aplda | svm | gmm | lr #
+metric="Cavg" # eer | Cavg #
 
 #####################
 
@@ -109,7 +109,7 @@ lr_process="lda-submean-whiten-norm" # this process should not contain "mean" fo
 
 # plda #
 plda_smoothing=0.0 # work for plda or adapt-plda
-plda_trainset="train" # should be one set only
+plda_trainset="train_aug_with_noise_volume_aug" # should be one set only
 plda_process="lda-submean-whiten-norm-trainplda"
 
 # adapt-plda #
@@ -117,7 +117,7 @@ aplda_smoothing=0.0
 within_covar_scale=0.70
 between_covar_scale=0.30
 mean_diff_scale=1
-aplda_trainset="train" # should be one set only
+aplda_trainset="train_aug_with_noise_volume_aug" # should be one set only
 aplda_process="lda-submean-whiten-norm-trainaplda"
 
 #####################
@@ -164,8 +164,8 @@ lda_data_config="$trainset[$trainset $enrollset $testset]"
 submean_data_config="$trainset[$trainset $enrollset $testset]"
 whiten_data_config="$trainset[$trainset $enrollset $testset]"
 else
-[ "$lda_data_config" == "" ] && lda_data_config=$trainset[$trainset $enrollset $testset] && echo "[Notice] It will set the default config $trainset[$trainset $enrollset $testset] for lda, if used."
-[ "$submean_data_config" == "" ] && submean_data_config=$trainset[$trainset $enrollset $testset] && echo "[Notice] It will set the default config $trainset[$trainset $enrollset $testset] for submean, if used."
+[ "$lda_data_config" == "" ] && lda_data_config="$trainset[$trainset $enrollset $testset]" && echo "[Notice] It will set the default config $trainset[$trainset $enrollset $testset] for lda, if used."
+[ "$submean_data_config" == "" ] && submean_data_config="$trainset[$trainset $enrollset $testset]" && echo "[Notice] It will set the default config $trainset[$trainset $enrollset $testset] for submean, if used."
 [ "$whiten_data_config" == "" ] && whiten_data_config=$trainset[$trainset $enrollset $testset] && echo "[Notice] It will set the default config $trainset[$trainset $enrollset $testset] for whiten, if used."
 fi
 

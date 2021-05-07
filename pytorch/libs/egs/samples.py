@@ -55,6 +55,9 @@ class ChunkSamples():
                 utt_selected = self.dataset.spk2utt[key]
                 spk_chunk_num = 0
                 for utt in utt_selected:
+                    if utt not in self.dataset.feats_scp:
+                        print("No such utt:", utt)
+                        continue
                     ark_path = self.dataset.feats_scp[utt]
                     num_frames = self.dataset.utt2num_frames[utt]
 

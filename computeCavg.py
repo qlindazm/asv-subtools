@@ -47,9 +47,9 @@ def process_pair_scores(scores, lang2lang_id, utt2lang_id, lang_num, trial_list)
     lang, utt, score = line.strip().split()
     if trial_list.has_key(lang + utt):
       if utt2lang_id.has_key(utt):
-        pairs.append([lang2lang_id[lang], utt2lang_id[utt], float(score)])
+        pairs.append([lang2lang_id[lang], utt2lang_id[utt], float(score)])#exp(float(score))])  
       else:
-        pairs.append([lang2lang_id[lang], -1, float(score)])
+        pairs.append([lang2lang_id[lang], -1, float(score)])#exp(float(score))])  
       stats.append(float(score))
   return pairs, min(stats), max(stats)
 

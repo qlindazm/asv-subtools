@@ -7,7 +7,7 @@ import os
 import argparse
 import traceback
 import torch
-
+# import numpy  # try to solve Error: mkl-service + Intel(R) MKL: MKL_THREADING_LAYER=INTEL is incompatible with libgomp.so.1 library.
 sys.path.insert(0, 'subtools/pytorch')
 
 import libs.support.utils as utils

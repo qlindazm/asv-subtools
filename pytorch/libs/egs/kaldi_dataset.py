@@ -118,6 +118,7 @@ class KaldiDataset():
         else:
             self.num_frames = None
 
+        # print("********************", self.feats_scp.keys())
         # Feature dim
         self.feat_dim = kaldi_io.read_mat(
             self.feats_scp[list(self.feats_scp.keys())[0]]).shape[1] if "feats_scp" in self.loaded_attr else None

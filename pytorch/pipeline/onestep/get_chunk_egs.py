@@ -50,7 +50,7 @@ def get_args():
                     help="The num utts to split for valid. 1024 for --total-spk.")
 
     parser.add_argument("--sample-type", type=str, default='speaker_balance',
-                    choices=["speaker_balance", "sequential"],
+                    choices=["speaker_balance", "sequential", "every_utt"],
                     help="The sample type for trainset.")
 
     parser.add_argument("--chunk-num", type=int, default=-1,

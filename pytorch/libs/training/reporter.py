@@ -136,6 +136,7 @@ class Reporter():
                 sys.exit(1)
 
     def update(self, snapshot:dict):
+        # print(snapshot)
         # One update calling and one using of self.trainer.training_point and current_lr.
         current_lr = self.optimizer.state_dict()['param_groups'][0]['lr']
         self.queue.put((snapshot, self.trainer.training_point, current_lr))

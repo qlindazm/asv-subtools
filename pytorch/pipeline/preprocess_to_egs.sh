@@ -32,8 +32,9 @@ valid_sample_type="every_utt" # With split type [--total-spk] and sample type [e
                               # as possible and finally we get valid_num_utts * valid_chunk_num = 1024 * 2 = 2048 valid chunks.
 valid_chunk_num=2
 
-. subtools/path.sh
+#. subtools/path.sh
 . subtools/parse_options.sh
+. subtools/path.sh
 
 if [[ $# != 2 ]];then
 echo "[exit] Num of parameters is not equal to 2"
